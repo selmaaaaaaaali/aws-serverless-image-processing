@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  UploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: upload-bucket-demo
+
+  ProcessedBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: processed-bucket-demo
+
+  ImageProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ImageProcessor
+      Runtime: python3.9
+      Handler: app.lambda_handler
+      Code:
+        S3Bucket: "lambda-code-bucket" # placeholder
+        S3Key: "image_processor.zip"    # placeholder
+      Environment:
+        Variables:
+          PROCESSED_BUCKET: !Ref ProcessedBucket
+          DYNAMODB_TABLE: ImageMetadata
+      Role: arn:aws:iam::123456789012:role/lambda-execution-role # placeholder
+
+  LambdaS3Trigger:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ImageProcessorFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !GetAtt UploadBucket.Arn
