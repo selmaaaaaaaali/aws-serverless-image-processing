@@ -1,35 +1,34 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  Serverless Image Processing with S3, Lambda, API Gateway, and CloudFront
+Description: Serverless Image Processing with S3, Lambda, API Gateway, and CloudFront
 
 Parameters:
   LambdaS3CodeBucket:
     Type: String
-    Description: "S3 bucket containing the Lambda deployment package"
+    Default: "grad-project-lambda-bucket-1234"
   LambdaS3CodeKey:
     Type: String
-    Description: "S3 key for the Lambda deployment package"
+    Default: "image_processor_random.zip"
 
 Resources:
 
   UploadBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: upload-bucket-demo
+      BucketName: grad-project-upload-bucket-5678
       VersioningConfiguration:
         Status: Enabled
 
   ProcessedBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: processed-bucket-demo
+      BucketName: grad-project-processed-bucket
       VersioningConfiguration:
         Status: Enabled
 
   ImageMetadataTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: ImageMetadata
+      TableName: grad-project-image-metadata
       AttributeDefinitions:
         - AttributeName: id
           AttributeType: S
@@ -41,7 +40,7 @@ Resources:
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: LambdaExecutionRole
+      RoleName: grad-project-lambda-role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -57,7 +56,7 @@ Resources:
   ImageProcessorFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: ImageProcessor
+      FunctionName: grad-project-image-processor
       Runtime: python3.9
       Handler: app.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
