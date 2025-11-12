@@ -12,7 +12,6 @@ Parameters:
 
 Resources:
 
-  # Upload bucket
   UploadBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -20,7 +19,6 @@ Resources:
       VersioningConfiguration:
         Status: Enabled
 
-  # Processed bucket
   ProcessedBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -28,7 +26,6 @@ Resources:
       VersioningConfiguration:
         Status: Enabled
 
-  # DynamoDB table (optional)
   ImageMetadataTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -41,7 +38,6 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
-  # Lambda execution role
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -58,7 +54,6 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
         - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
 
-  # Lambda function
   ImageProcessorFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -73,63 +68,3 @@ Resources:
         Variables:
           PROCESSED_BUCKET: !Ref ProcessedBucket
           DYNAMODB_TABLE: !Ref ImageMetadataTable
-
-  # Lambda S3 trigger
-  LambdaS3Permission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref ImageProcessorFunction
-      Action: lambda:InvokeFunction
-      Principal: s3.amazonaws.com
-      SourceArn: !GetAtt UploadBucket.Arn
-
-  UploadBucketNotification:
-    Type: AWS::S3::BucketNotification
-    Properties:
-      Bucket: !Ref UploadBucket
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Function: !GetAtt ImageProcessorFunction.Arn
-
-  # API Gateway REST API
-  ImageAPI:
-    Type: AWS::ApiGateway::RestApi
-    Properties:
-      Name: ImageProcessingAPI
-      EndpointConfiguration:
-        Types:
-          - REGIONAL
-
-  LambdaApiIntegration:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      RestApiId: !Ref ImageAPI
-      ResourceId: !GetAtt ImageAPI.RootResourceId
-      HttpMethod: POST
-      AuthorizationType: NONE
-      Integration:
-        Type: AWS_PROXY
-        IntegrationHttpMethod: POST
-        Uri: !Sub
-          - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
-          - { Region: !Ref "AWS::Region", LambdaArn: !GetAtt ImageProcessorFunction.Arn }
-
-  # CloudFront Distribution
-  ImageCloudFront:
-    Type: AWS::CloudFront::Distribution
-    Properties:
-      DistributionConfig:
-        Enabled: true
-        Origins:
-          - DomainName: !GetAtt ProcessedBucket.DomainName
-            Id: S3ProcessedOrigin
-            S3OriginConfig:
-              OriginAccessIdentity: ""
-        DefaultCacheBehavior:
-          TargetOriginId: S3ProcessedOrigin
-          ViewerProtocolPolicy: redirect-to-https
-          AllowedMethods:
-            - GET
-            - HEAD
-        DefaultRootObject: index.html
