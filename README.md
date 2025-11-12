@@ -145,4 +145,3 @@ pytest tests/test_lambda.py
 * Verifies processed images exist in S3
 * Verifies metadata is written to DynamoDB
 
-```
