@@ -1,34 +1,135 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Serverless Image Processing with S3, Lambda, API Gateway, and CloudFront
+
+Parameters:
+  LambdaS3CodeBucket:
+    Type: String
+    Description: "S3 bucket containing the Lambda deployment package"
+  LambdaS3CodeKey:
+    Type: String
+    Description: "S3 key for the Lambda deployment package"
+
 Resources:
+
+  # Upload bucket
   UploadBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: upload-bucket-demo
+      VersioningConfiguration:
+        Status: Enabled
 
+  # Processed bucket
   ProcessedBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: processed-bucket-demo
+      VersioningConfiguration:
+        Status: Enabled
 
+  # DynamoDB table (optional)
+  ImageMetadataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ImageMetadata
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # Lambda execution role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: LambdaExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+
+  # Lambda function
   ImageProcessorFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: ImageProcessor
       Runtime: python3.9
       Handler: app.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
       Code:
-        S3Bucket: "lambda-code-bucket" # placeholder
-        S3Key: "image_processor.zip"    # placeholder
+        S3Bucket: !Ref LambdaS3CodeBucket
+        S3Key: !Ref LambdaS3CodeKey
       Environment:
         Variables:
           PROCESSED_BUCKET: !Ref ProcessedBucket
-          DYNAMODB_TABLE: ImageMetadata
-      Role: arn:aws:iam::123456789012:role/lambda-execution-role # placeholder
+          DYNAMODB_TABLE: !Ref ImageMetadataTable
 
-  LambdaS3Trigger:
+  # Lambda S3 trigger
+  LambdaS3Permission:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Ref ImageProcessorFunction
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
       SourceArn: !GetAtt UploadBucket.Arn
+
+  UploadBucketNotification:
+    Type: AWS::S3::BucketNotification
+    Properties:
+      Bucket: !Ref UploadBucket
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt ImageProcessorFunction.Arn
+
+  # API Gateway REST API
+  ImageAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: ImageProcessingAPI
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  LambdaApiIntegration:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ImageAPI
+      ResourceId: !GetAtt ImageAPI.RootResourceId
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - { Region: !Ref "AWS::Region", LambdaArn: !GetAtt ImageProcessorFunction.Arn }
+
+  # CloudFront Distribution
+  ImageCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Origins:
+          - DomainName: !GetAtt ProcessedBucket.DomainName
+            Id: S3ProcessedOrigin
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: S3ProcessedOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+        DefaultRootObject: index.html
