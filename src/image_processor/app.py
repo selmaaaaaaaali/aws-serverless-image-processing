@@ -10,12 +10,11 @@ s3 = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
 
 # Environment variables
-PROCESSED_BUCKET = os.environ.get("PROCESSED_BUCKET", "processed-bucket-demo")
-DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "ImageMetadata")
+PROCESSED_BUCKET = os.environ.get("PROCESSED_BUCKET", "grad-project-processed-bucket")
+DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "grad-project-image-metadata")
 table = dynamodb.Table(DYNAMODB_TABLE)
 
 def process_image(image_data, size=(128, 128)):
-    """Resize the image to the given size."""
     image = Image.open(io.BytesIO(image_data))
     image.thumbnail(size)
     output_buffer = io.BytesIO()
@@ -24,9 +23,7 @@ def process_image(image_data, size=(128, 128)):
     return output_buffer
 
 def lambda_handler(event, context):
-    """Main Lambda handler supporting S3 or API Gateway triggers."""
     records = event.get('Records', [])
-    
     if records:  # S3 trigger
         responses = []
         for record in records:
